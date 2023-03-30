@@ -38,7 +38,7 @@ class FCBlock(nn.Module):
 
     def forward(self, x):
         x = self.fc(x)
-        print("Size of x in FCB: "+str(x.size()))
+        #print("Size of x in FCB: "+str(x.size()))
         # Resize the tensor into shape of (channels , 1, 1)
         x = x.view(x.size(0), -1, 1, 1)
         if x.size(0) == 1:
@@ -117,8 +117,8 @@ class Pix2PixGenerator(nn.Module):
 
         bottleneck = self.bottleneck(d7)
         label = self.fc(self.label)
-        print(bottleneck.size())
-        print(label.size())
+        # print(bottleneck.size())
+        # print(label.size())
 
         # Concatenate label and bottleneck output.
 

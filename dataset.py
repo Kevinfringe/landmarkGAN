@@ -6,12 +6,24 @@ import torch
 import torchvision.transforms as transforms
 from PIL import Image
 
+exp_dict = {
+    "AN": 0,
+    "DI": 1,
+    "FE": 2,
+    "HA": 3,
+    "NE": 4,
+    "SA": 5,
+    "SU": 6
+}
+
 
 class jaffeDataset(torch.utils.data.Dataset):
     def __init__(self, train_set_path, train_set_final_path, lm_img_path, lm_csv_path, transform=None):
         self.transform = transform
         self.imgs = []
         self.lm_img_path = lm_img_path
+        self.ori_exp_index = 0
+        self.target_exp_index = 0
 
         # loop through the files in train_set_final_path and generate a list of tuples (final_path, original_path)
         for file_name in os.listdir(train_set_final_path):
@@ -23,6 +35,10 @@ class jaffeDataset(torch.utils.data.Dataset):
                 origin_exp_type = parts[1]
                 index = parts[1][2:]
                 suffix = parts[3]
+
+                self.ori_exp_index = exp_dict[origin_exp_type[:2]]
+                self.target_exp_index = exp_dict[exp_type]
+
                 if (int)(index) >= 4:
                     index = 3
                 # generate the expected file name in the original train set directory
@@ -33,7 +49,7 @@ class jaffeDataset(torch.utils.data.Dataset):
                     original_path = os.path.join(train_set_path, original_file_name)
                     final_path = os.path.join(train_set_final_path, file_name)
                     lm_path = os.path.join(lm_img_path, f"{prefix}.{origin_exp_type}.{suffix}.jpg")
-                    lm_csv = os.path.joing(lm_csv_path, f"{prefix}.{origin_exp_type}.{suffix}.csv")
+                    lm_csv = os.path.join(lm_csv_path, f"{prefix}.{origin_exp_type}.{suffix}.csv")
                     self.imgs.append((final_path, original_path, lm_path, lm_csv))
 
     def __getitem__(self, index):
@@ -52,7 +68,13 @@ class jaffeDataset(torch.utils.data.Dataset):
         lm_array = df.to_numpy()
         lm_array = torch.tensor(lm_array)
 
-        return img, lm_img, target_img, lm_array
+        # define landmark generator label.
+        lm_gen_label = torch.zeros((7,))
+        lm_gen_label[self.ori_exp_index] = 1
+        exp_gen_label = torch.zeros((7,))
+        exp_gen_label[self.ori_exp_index] = 1
+
+        return img, lm_img, target_img, lm_array, lm_gen_label, exp_gen_label
 
     def __len__(self):
         return len(self.imgs)
@@ -83,28 +105,29 @@ class jaffeDataset(torch.utils.data.Dataset):
 import matplotlib.pyplot as plt
 
 # # Below code is only for testing.
-# # set the paths to the training and validation sets, as well as the landmarks images
+# set the paths to the training and validation sets, as well as the landmarks images
 # train_set_path = "./jaffedbase_official/train_set_jpg/"
 # train_set_final_path = "./jaffedbase_official/train_set_final/"
 # lm_img_path = "./jaffedbase_official/lm_img/"
+# lm_csv_path = "./jaffedbase_official/lm_csv/"
 #
 # # define the image transformations
 # # define the image transformations
 # transform = transforms.Compose([
 #     transforms.Resize((256, 256)),
-#     transforms.RandomCrop((224, 224)),
 #     transforms.RandomHorizontalFlip(),
 #     transforms.ToTensor(),
 # ])
 #
 # # create the jaffeDataset object
-# dataset = jaffeDataset(train_set_path, train_set_final_path, lm_img_path, transform=transform)
+# dataset = jaffeDataset(train_set_path, train_set_final_path, lm_img_path,lm_csv_path, transform=transform)
 #
 # # create the data loader for the dataset
 # data_loader = torch.utils.data.DataLoader(dataset, batch_size=4, shuffle=True)
 #
 # # loop through the data loader and plot the images
-# for img, lm_img, target_img in data_loader:
+# for img, lm_img, target_img, lm_array in data_loader:
+#     print(img.size())
 #     # convert the tensor images to numpy arrays and transpose the dimensions
 #     img = img.numpy().transpose((0, 2, 3, 1))
 #     lm_img = lm_img.numpy().transpose((0, 2, 3, 1))
