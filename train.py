@@ -13,7 +13,7 @@ import discriminator
 import loss
 
 # define training description.
-training_description = "with_originalimg_id_5_facere_100_others_10_rm_normal_target"
+training_description = "second_train"
 
 # sys.stdout = open("log_01.txt", "w")
 train_set_input_path = "./jaffedbase_official/train_set_final/"
@@ -36,7 +36,8 @@ def train(args, G_l, D_l, G_e, D_e, device, trainloader, optimizer_G_l, optimize
     G_e_loss = 0.0
 
     gan_loss = loss.GANLoss().to(device)
-    lm_loss = loss.LandmarkLoss().to(device)
+    #lm_loss = loss.LandmarkLoss().to(device)
+    lm_loss = nn.L1Loss().to(device)
     id_loss = loss.IdentityLoss().to(device)
     # re_loss = loss.FaceReconstructionLoss().to(device)
     re_loss = nn.HuberLoss().to(device)
@@ -65,13 +66,13 @@ def train(args, G_l, D_l, G_e, D_e, device, trainloader, optimizer_G_l, optimize
         D_l_pred = D_l(img, lm_img_fake)
         G_l_gan_loss = gan_loss(D_l_pred, target_is_real=True)
         # landmark loss
-        lm_loss.assign_fields(lm_img_fake, lm_img, lm_array, 256)
-        G_l_lm_loss = lm_loss()
+        #lm_loss.assign_fields(lm_img_fake, lm_img, lm_array, 256)
+        G_l_lm_loss = lm_loss(lm_img_fake, lm_img)
 
-        G_l_loss = args.lambda_lm * G_l_lm_loss + G_l_gan_loss
+        G_l_train_loss = args.lambda_lm * G_l_lm_loss + G_l_gan_loss
 
         optimizer_G_l.zero_grad()
-        G_l_loss.backward()
+        G_l_train_loss.backward()
         optimizer_G_l.step()
 
         # Then train G_e
@@ -104,7 +105,7 @@ def train(args, G_l, D_l, G_e, D_e, device, trainloader, optimizer_G_l, optimize
         optimizer_G_e.step()
 
         D_l_loss += D_l_train_loss.item()
-        G_l_loss += G_l_loss.item()
+        G_l_loss += G_l_train_loss.item()
         D_e_loss += D_e_train_loss.item()
         G_e_loss += G_train_e_loss.item()
 
@@ -114,7 +115,7 @@ def train(args, G_l, D_l, G_e, D_e, device, trainloader, optimizer_G_l, optimize
                 'Train Epoch: {} [{}/{} ({:.0f}%)]\tD_l_loss: {:.6f}\tG_l_loss: {:.6f}\n D_e_loss: {:.6f} G_e_loss: {:.6f}'
                 ' G_e_id_loss: {:.6f} G_re_loss: {:.6f} G_l_lm_loss: {:.6f}'.format(
                     epoch, batch_idx * len(img), len(trainloader.dataset),
-                           100. * batch_idx / len(trainloader), D_l_train_loss.item(), G_l_loss.item(),
+                           100. * batch_idx / len(trainloader), D_l_train_loss.item(), G_l_train_loss.item(),
                     D_e_train_loss.item(), G_train_e_loss.item(),
                     G_e_id_loss.item(), G_e_face_re_loss.item(), G_l_lm_loss.item()))
 
@@ -130,7 +131,7 @@ def train(args, G_l, D_l, G_e, D_e, device, trainloader, optimizer_G_l, optimize
     ))
 
     # save model
-    if epoch % 100 == 0:
+    if epoch%100 == 0:
         checkpoint_path = './{}_{}_checkpoint.pth'.format(epoch, training_description)
         torch.save({
             'G_l_state_dict': G_l.state_dict(),
@@ -185,16 +186,20 @@ def main():
     # Transformation on data.
     transform = transforms.Compose([
         # resize image.
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.ColorJitter(p=0.2),
         transforms.Resize([256, 256]),
         # transform data into Tensor
         transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
     transform_target = transforms.Compose([
         # resize image.
         transforms.Resize([256, 256]),
         # transform data into Tensor
-        transforms.ToTensor()
+        transforms.ToTensor(),
+        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
     ])
 
     # Define dataset.
@@ -217,30 +222,49 @@ def main():
 
 
     # resume training.
-    # checkpoint_path = "./99_with_originalimg_id_5_facere_100_others_10_rm_normal_target_checkpoint.pth"
-    # checkpoint = torch.load(checkpoint_path)
-    # G.load_state_dict(checkpoint['G_state_dict'])
-    # optimizer_G.load_state_dict(checkpoint['optimizer_G_state_dict'])
-    # D.load_state_dict(checkpoint['D_state_dict'])
-    # optimizer_D.load_state_dict(checkpoint['optimizer_D_state_dict'])
-    # checkpoint_sche_path = "./99_with_originalimg_id_5_facere_100_others_10_rm_normal_target_sche_checkpoint.pth"
-    # sche_checkpoint = torch.load(checkpoint_sche_path)
+    # 'G_l_state_dict': G_l.state_dict(),
+        # 'optimizer_G_l_state_dict': optimizer_G_l.state_dict(),
+        # 'D_l_state_dict': D_l.state_dict(),
+        # 'optimizer_D_l_state_dict': optimizer_D_l.state_dict(),
+        # 'G_e_state_dict': G_e.state_dict(),
+        # 'optimizer_G_e_state_dict': optimizer_G_e.state_dict(),
+        # 'D_e_state_dict': D_e.state_dict(),
+        # 'optimizer_D_e_state_dict': optimizer_D_e.state_dict()
+#     checkpoint_path = "./71_with_originalimg_id_5_facere_100_others_10_rm_normal_target_checkpoint.pth"
+#     checkpoint = torch.load(checkpoint_path)
+#     G_l.load_state_dict(checkpoint['G_l_state_dict'])
+#     optimizer_G_l.load_state_dict(checkpoint['optimizer_G_l_state_dict'])
+#     D_l.load_state_dict(checkpoint['D_l_state_dict'])
+#     optimizer_D_l.load_state_dict(checkpoint['optimizer_D_l_state_dict'])
+
+#     G_e.load_state_dict(checkpoint['G_e_state_dict'])
+#     optimizer_G_e.load_state_dict(checkpoint['optimizer_G_e_state_dict'])
+#     D_e.load_state_dict(checkpoint['D_e_state_dict'])
+#     optimizer_D_e.load_state_dict(checkpoint['optimizer_D_e_state_dict'])
+
+#     checkpoint_sche_path = "./71_with_originalimg_id_5_facere_100_others_10_rm_normal_target_sche_checkpoint.pth"
+#     sche_checkpoint = torch.load(checkpoint_sche_path)
 
     # # Learning rate decay.
     scheduler_G_l = StepLR(optimizer_G_l, step_size=10, gamma=args.gamma)
     scheduler_D_l = StepLR(optimizer_D_l, step_size=10, gamma=args.gamma)
     scheduler_G_e = StepLR(optimizer_G_e, step_size=10, gamma=args.gamma)
     scheduler_D_e = StepLR(optimizer_D_e, step_size=10, gamma=args.gamma)
-    # scheduler_G.load_state_dict(sche_checkpoint['G_scheduler_dict'])
-    # scheduler_D.load_state_dict(sche_checkpoint['D_scheduler_dict'])
-    for epoch in range(args.epochs + 1):
+
+#     scheduler_G_l.load_state_dict(sche_checkpoint['G_l_scheduler_dict'])
+#     scheduler_D_l.load_state_dict(sche_checkpoint['D_l_scheduler_dict'])
+
+#     scheduler_G_e.load_state_dict(sche_checkpoint['G_e_scheduler_dict'])
+#     scheduler_D_e.load_state_dict(sche_checkpoint['D_e_scheduler_dict'])
+
+    for epoch in range(0, args.epochs + 1):
         train(args, G_l, D_l, G_e, D_l, device, trainloader, optimizer_G_l, optimizer_D_l, optimizer_G_e, optimizer_D_e, epoch)
         scheduler_G_l.step()
         scheduler_D_l.step()
         scheduler_G_e.step()
         scheduler_D_e.step()
 
-        if epoch % 100 == 0:
+        if epoch%100 == 0:
             checkpoint_scheduler_path = './{}_{}_sche_checkpoint.pth'.format(epoch, training_description)
             torch.save({
                 'G_l_scheduler_dict': scheduler_G_l.state_dict(),
